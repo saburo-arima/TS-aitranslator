@@ -4,9 +4,31 @@ import * as os from 'os';
 import * as url from 'url';
 import { OpenAI } from 'openai';
 import Store from 'electron-store';
+import * as crypto from 'crypto-js';
+
+// 暗号化のためのシークレットキー生成（マシン固有の値を使用）
+const getMachineSecret = (): string => {
+  const machineId = `${os.hostname()}-${os.platform()}-${os.arch()}-${os.cpus()[0].model}`;
+  return crypto.SHA256(machineId).toString();
+};
+
+// 暗号化・復号化のためのユーティリティ関数
+const encrypt = (text: string): string => {
+  return crypto.AES.encrypt(text, getMachineSecret()).toString();
+};
+
+const decrypt = (ciphertext: string): string => {
+  try {
+    const bytes = crypto.AES.decrypt(ciphertext, getMachineSecret());
+    return bytes.toString(crypto.enc.Utf8);
+  } catch (error) {
+    console.error('復号化エラー:', error);
+    return '';
+  }
+};
 
 interface StoreSchema {
-  apiKey: string;
+  encryptedApiKey: string; // APIキーを暗号化して保存
   proxyConfig: {
     enabled: boolean;
     host: string;
@@ -20,7 +42,7 @@ interface StoreSchema {
 // 設定を保存するためのストアを初期化
 const store = new Store<StoreSchema>({
   schema: {
-    apiKey: {
+    encryptedApiKey: {
       type: 'string',
       default: ''
     },
@@ -48,6 +70,19 @@ const store = new Store<StoreSchema>({
     }
   }
 });
+
+// APIキーの取得（復号化）
+const getApiKey = (): string => {
+  const encryptedApiKey = store.get('encryptedApiKey');
+  if (!encryptedApiKey) return '';
+  return decrypt(encryptedApiKey);
+};
+
+// APIキーの保存（暗号化）
+const setApiKey = (apiKey: string): void => {
+  const encryptedApiKey = encrypt(apiKey);
+  store.set('encryptedApiKey', encryptedApiKey);
+};
 
 // メインウィンドウの参照をグローバルに保持
 let mainWindow: BrowserWindow | null = null;
@@ -251,7 +286,7 @@ app.whenReady().then(() => {
   // OpenAI APIを使って翻訳を行う
   ipcMain.handle('translate-text', async (_, text: string) => {
     try {
-      const apiKey = store.get('apiKey');
+      const apiKey = getApiKey();
       if (!apiKey) {
         return { error: 'APIキーが設定されていません。設定画面でAPIキーを設定してください。' };
       }
@@ -317,13 +352,13 @@ app.whenReady().then(() => {
 
   // API設定の保存
   ipcMain.handle('save-api-key', (_, apiKey: string) => {
-    store.set('apiKey', apiKey);
+    setApiKey(apiKey);
     return { success: true };
   });
 
   // API設定の取得
   ipcMain.handle('get-api-key', () => {
-    return store.get('apiKey');
+    return getApiKey();
   });
 
   // プロキシ設定の保存

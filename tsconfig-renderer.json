@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "strict": true,
+    "jsx": "react",
+    "sourceMap": true,
+    "outDir": "dist/renderer",
+    "baseUrl": "."
+  },
+  "include": ["src/renderer/**/*"]
+} 
